@@ -34,6 +34,14 @@
   overflow: visible;
   max-height: none;
 }
+.mp-result tbody tr.mp-timing-row-dark,
+.mp-queries tbody tr.mp-timing-row-dark {
+  background-color: #e5e5e5;
+}
+.mp-result tbody tr.mp-timing-row-light,
+.mp-queries tbody tr.mp-timing-row-light {
+  background-color: transparent;
+}
 .mp-result pre,
 .mp-queries pre,
 .mp-result code,
@@ -562,7 +570,7 @@
   padding-bottom: 3px;
 }
 .mp-results .mp-popup .mp-timings .mp-label {
-  max-width: 275px;
+  max-width: fit-content;
 }
 .mp-results .mp-queries {
   display: none;

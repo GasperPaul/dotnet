@@ -15,6 +15,7 @@ namespace StackExchange.Profiling {
         ClientTimings: IClientTimings;
         User: string;
         HasUserViewed: boolean;
+        AdditionalTimings: { [id: string]: IAdditionalTiming[] };
         // additive on client side
         CustomTimingStats: { [id: string]: ICustomTimingStat };
         HasCustomTimings: boolean;
@@ -76,6 +77,14 @@ namespace StackExchange.Profiling {
         // added for gaps
         PrevGap: IGapInfo;
         NextGap: IGapInfo;
+    }
+
+    interface IAdditionalTiming {
+        Id: string;
+        Name: string;
+        Start: number;
+        Duration: number;
+        DurationWithoutChildren: number;
     }
 
     interface ICustomTimingStat {
@@ -330,6 +339,7 @@ namespace StackExchange.Profiling {
                     window.profiler.Started = new Date('' + window.profiler.Started); // Ugh, JavaScript
                     const profilerHtml = mp.renderProfiler(window.profiler, false);
                     mp.container.insertAdjacentHTML('beforeend', profilerHtml);
+                    mp.recolorRows(mp.options.showTrivial);
 
                     // highight
                     mp.container.querySelectorAll('pre code').forEach(block => mp.highlight(block as HTMLElement));
@@ -664,13 +674,14 @@ namespace StackExchange.Profiling {
                 }
                 return (milliseconds || 0).toFixed(decimalPlaces === undefined ? 1 : decimalPlaces);
             };
+            const replaceFullName = (name: string) => name.replace(/.*\.(\S+)\s*\((.*)\)/g, '$1 - $2');
 
             const renderTiming = (timing: ITiming) => {
                 const customTimingTypes = p.CustomTimingStats ? Object.keys(p.CustomTimingStats) : [];
                 let str = `
   <tr class="${timing.IsTrivial ? 'mp-trivial' : ''}" data-timing-id="${timing.Id}">
-    <td class="mp-label" title="${encode(timing.Name && timing.Name.length > 45 ? timing.Name : '')}"${timing.Depth > 0 ? ` style="padding-left:${timing.Depth * 11}px;"` : ''}>
-      ${encode(timing.Name.slice(0, 45))}${encode(timing.Name && timing.Name.length > 45 ? '...' : '')}
+    <td class="mp-label" title="${encode(timing.Name)}"${timing.Depth > 0 ? ` style="padding-left:${timing.Depth * 11}px;"` : ''}>
+      ${encode(replaceFullName(timing.Name))}
     </td>
     <td class="mp-duration" title="duration of this step without any children's durations">
       ${duration(timing.DurationWithoutChildrenMilliseconds)}
@@ -735,6 +746,33 @@ namespace StackExchange.Profiling {
           </tr>`).join('')}
         </table>`;
             };
+
+            const additionalTimings = () => {
+                if (!p.AdditionalTimings) {
+                    return '';
+                }
+
+                const isTrivial = (t: IAdditionalTiming) => t.Duration < (this.options.trivialMilliseconds || 2);
+
+                return Object.keys(p.AdditionalTimings).map(category => `
+        <table class="mp-timings mp-additional-timing">
+          <thead>
+            <tr>
+              <th style="text-align:left">${encode(category)}</th>
+              <th>duration (ms)</th>
+              <th class="mp-more-columns">with children (ms)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${p.AdditionalTimings[category].map(timing => `
+            <tr class="${isTrivial(timing) ? 'mp-trivial': ''}" data-timing-id="${timing.Id}">
+              <td class="mp-label">${encode(timing.Name)}</td>
+              <td class="mp-duration">${duration(timing.DurationWithoutChildren)}</td>
+              <td class="mp-duration mp-more-columns">${duration(timing.Duration)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`).join('');
+            };            
 
             const clientTimings = () => {
                 if (!p.ClientTimings) {
@@ -871,7 +909,8 @@ namespace StackExchange.Profiling {
       </div>
       <div class="mp-output">
         ${timingsTable}
-		${customTimings()}
+        ${customTimings()}
+        ${additionalTimings()}
         ${clientTimings()}
         <div class="mp-links">
           <a href="${this.options.path}results?id=${p.Id}" class="mp-share-mp-results" target="_blank">share</a>
@@ -888,6 +927,16 @@ namespace StackExchange.Profiling {
     </div>
     ${profilerQueries()}
   </div>`;
+        }
+
+        private recolorRows = (showTrivial: boolean) => {
+            const isNotTrivial = (el: Element) => !el.classList.contains('mp-trivial');
+            [].slice.call(document.querySelectorAll('.mp-result .mp-timings tr'))
+                .filter((el: HTMLElement) => showTrivial || isNotTrivial(el))
+                .forEach((el: HTMLElement, i: number) => {
+                    el.classList.remove('mp-timing-row-dark', 'mp-timing-row-light');
+                    el.classList.add(`mp-timing-row-${i%2 ? 'dark' : 'light'}`);
+                });
         }
 
         private buttonShow = (json: IProfiler) => {
@@ -911,6 +960,9 @@ namespace StackExchange.Profiling {
             for (let i = 0; i < toRemove; i++) {
                 results[i].parentNode.removeChild(results[i]);
             }
+
+            // add interleaved row colors
+            this.recolorRows(this.options.showTrivial);
         }
 
         private scrollToQuery = (link: HTMLElement, queries: HTMLElement) => {
@@ -925,11 +977,13 @@ namespace StackExchange.Profiling {
         // some elements want to be hidden on certain doc events
         private bindDocumentEvents = (mode: RenderMode) => {
             const mp = this;
+
             // Common handlers
             document.addEventListener('click', function (event) {
                 const target = event.target as HTMLElement;
                 if (target.matches('.mp-toggle-trivial')) {
                     target.closest('.mp-result').classList.toggle('show-trivial');
+                    mp.recolorRows(!target.classList.contains('mp-trivial'));
                 }
                 if (target.matches('.mp-toggle-columns')) {
                     target.closest('.mp-result').classList.toggle('show-columns');

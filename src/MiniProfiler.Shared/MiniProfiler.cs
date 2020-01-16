@@ -166,6 +166,12 @@ namespace StackExchange.Profiling
         [DataMember(Order = 10)]
         public bool HasUserViewed { get; set; }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        [DataMember(Order = 11)]
+        public Dictionary<string, List<AdditionalTiming>> AdditionalTimings { get; set; }
+
         // Allows async to properly track the attachment point
         private readonly AsyncLocal<Timing> _head = new AsyncLocal<Timing>();
 
